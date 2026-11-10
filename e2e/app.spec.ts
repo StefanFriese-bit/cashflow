@@ -87,7 +87,11 @@ test('the sheet view lists payments by week with the end-of-week balance', async
   const grid = page.locator('table.grid');
   await expect(grid).toContainText('Bank One — end of week');
   await expect(grid).toContainText('Rent');
-  await expect(grid.locator('thead th').nth(1)).toHaveText('9–15 Nov');
+  await expect(grid.locator('thead tr.wrow th').nth(1)).toHaveText('9–15 Nov');
+  // each month has its own band on top, and a new month starts with a dark line
+  await expect(grid.locator('thead tr.mrow th').nth(1)).toHaveText('November 2026');
+  await expect(grid.locator('thead tr.mrow th').nth(2)).toHaveText('December 2026');
+  await expect(grid.locator('thead tr.wrow th.mstart').first()).toHaveText('7–13 Dec');
   if (!isMobile) await noSideScroll(page);
 });
 

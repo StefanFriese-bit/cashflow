@@ -1313,6 +1313,126 @@ table.grid tr.total td.rowhead {
   background: var(--card-2);
 }
 
+/* ---------- month colours (like the sheet: each month its own colour, a dark line between months) ---------- */
+:root {
+  --m-head: 34%; /* how strong the month colour is in the header */
+  --m-band: 46%;
+  --m-body: 9%; /* and down the column */
+  --m-line: #1b2420;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --m-head: 30%;
+    --m-band: 40%;
+    --m-body: 10%;
+    --m-line: #ece6da;
+  }
+}
+:root[data-theme='dark'] {
+  --m-head: 30%;
+  --m-band: 40%;
+  --m-body: 10%;
+  --m-line: #ece6da;
+}
+.m01 { --mc: #e8b923; } /* January — butter yellow */
+.m02 { --mc: #f0874a; } /* February — peach */
+.m03 { --mc: #e0607e; } /* March — rose */
+.m04 { --mc: #8a76e0; } /* April — lavender */
+.m05 { --mc: #2fb3b3; } /* May — aqua */
+.m06 { --mc: #8aa84a; } /* June — sage */
+.m07 { --mc: #f2a03d; } /* July — apricot */
+.m08 { --mc: #b36fd1; } /* August — lilac */
+.m09 { --mc: #3fbf80; } /* September — mint */
+.m10 { --mc: #c09a5b; } /* October — sand */
+.m11 { --mc: #4a95dd; } /* November — light blue */
+.m12 { --mc: #5fb34a; } /* December — light green */
+
+table.grid thead tr.mrow th {
+  height: 28px;
+  padding: 0 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--mc) var(--m-band), var(--card));
+}
+table.grid thead tr.mrow th.rowhead {
+  background: var(--card-2);
+}
+table.grid thead tr.wrow th {
+  top: 28px; /* under the month band */
+  color: var(--ink);
+  background: color-mix(in srgb, var(--mc) var(--m-head), var(--card));
+}
+table.grid thead tr.wrow th.rowhead {
+  background: var(--card-2);
+  color: var(--ink-2);
+}
+table.grid thead tr.wrow th.now {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: inset 0 -3px 0 var(--mc);
+}
+table.grid td.cell,
+table.grid td.gcell {
+  background: color-mix(in srgb, var(--mc) var(--m-body), var(--card));
+}
+table.grid tr.grp td.gcell {
+  background: color-mix(in srgb, var(--mc) var(--m-body), var(--bg-deep));
+}
+table.grid tr.total td.cell {
+  background: color-mix(in srgb, var(--mc) calc(var(--m-body) * 2), var(--card-2));
+}
+/* this week: its own month's colour, a little stronger (a yellow tint here read as January) */
+table.grid td.cell.now,
+table.grid td.gcell.now {
+  background: color-mix(in srgb, var(--mc) calc(var(--m-body) * 2.2), var(--card));
+}
+table.grid tr.total td.cell.now {
+  background: color-mix(in srgb, var(--mc) calc(var(--m-body) * 3), var(--card-2));
+}
+table.grid .mstart {
+  border-left: 2px solid var(--m-line);
+}
+
+/* on a phone the payment names take less room, so more weeks fit beside them */
+@media (max-width: 600px) {
+  table.grid .rowhead {
+    min-width: 150px;
+    max-width: 160px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+  }
+}
+
+/* the List view: a coloured month heading and a stripe down each week */
+.mhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 10px;
+  padding: 7px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--mc) var(--m-band), var(--card));
+}
+.reveal > .mhead:first-child {
+  margin-top: 0;
+}
+.week[class*=' m'] {
+  border-left: 5px solid color-mix(in srgb, var(--mc) 75%, var(--card));
+}
+.week[class*=' m'] .w-head {
+  background: color-mix(in srgb, var(--mc) var(--m-body), var(--card));
+  border-radius: calc(var(--radius) - 2px) var(--radius) 0 0;
+}
+
 /* ---------- misc ---------- */
 .empty {
   text-align: center;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'preact/hooks';
-import { addDays, nice, weekLabel, weekStart } from '../engine/dates';
+import { addDays, monthName, nice, weekLabel, weekStart } from '../engine/dates';
 import { money } from '../engine/money';
 import { weeks, type WeekRow } from '../engine/plan';
 import type { Item, Occ, State } from '../engine/types';
@@ -15,6 +15,11 @@ export function groupRank(g: string): number {
 }
 
 type Who = 'all' | string;
+
+/** A week belongs to the month its Monday is in — the same as the sheet's columns. */
+export const monthOf = (w: WeekRow) => w.start.slice(0, 7);
+const mClass = (w: WeekRow) => `m${w.start.slice(5, 7)}`;
+const monthTitle = (ym: string) => `${monthName(+ym.slice(5, 7), true)} ${ym.slice(0, 4)}`;
 
 export function Weeks({ state, today, nav, wide }: { state: State; today: string; nav: Nav; wide: boolean }) {
   const [view, setView] = useState<'list' | 'sheet'>(() => (wide ? 'sheet' : 'list'));
@@ -52,8 +57,11 @@ export function Weeks({ state, today, nav, wide }: { state: State; today: string
         <SheetGrid state={state} rows={rows} today={today} who={who} nav={nav} />
       ) : (
         <div class="reveal">
-          {rows.map((w) => (
-            <WeekCard state={state} w={w} today={today} filt={filt} nav={nav} who={who} />
+          {rows.map((w, i) => (
+            <>
+              {(i === 0 || monthOf(rows[i - 1]) !== monthOf(w)) && <div class={`mhead ${mClass(w)}`}>{monthTitle(monthOf(w))}</div>}
+              <WeekCard state={state} w={w} today={today} filt={filt} nav={nav} who={who} />
+            </>
           ))}
         </div>
       )}
@@ -79,7 +87,7 @@ function WeekCard({ state, w, today, filt, nav, who }: { state: State; w: WeekRo
     else byDay.push([o.date, [o]]);
   }
   return (
-    <section class={`card tight week ${isNow ? 'now' : ''}`} aria-label={`Week ${weekLabel(w.start)}`}>
+    <section class={`card tight week ${mClass(w)} ${isNow ? 'now' : ''}`} aria-label={`Week ${weekLabel(w.start)}`}>
       <div class="w-head">
         <div>
           <div class="w-title">{weekLabel(w.start)}</div>
@@ -137,15 +145,31 @@ function SheetGrid({ state, rows, today, who, nav }: { state: State; rows: WeekR
     else groups.push([i.group, [i]]);
   }
   const isNow = (w: WeekRow) => today >= w.start && today <= w.end;
+  // each column wears its month's colour; a dark line where a new month starts
+  const col = (w: WeekRow, i: number) => `${mClass(w)}${i > 0 && monthOf(rows[i - 1]) !== monthOf(w) ? ' mstart' : ''}${isNow(w) ? ' now' : ''}`;
+  const bands: { ym: string; n: number; w: WeekRow; i: number }[] = [];
+  rows.forEach((w, i) => {
+    const last = bands[bands.length - 1];
+    if (last && last.ym === monthOf(w)) last.n++;
+    else bands.push({ ym: monthOf(w), n: 1, w, i });
+  });
   const fmt = (v: number) => (Math.abs(v) < 0.005 ? '' : money(v, 'GBP', { exact: Math.abs(v) < 100 }));
   return (
     <div class="gridwrap">
       <table class="grid">
         <thead>
-          <tr>
+          <tr class="mrow">
+            <th class="rowhead" />
+            {bands.map((b) => (
+              <th colSpan={b.n} class={col(b.w, b.i).replace(' now', '')}>
+                {monthTitle(b.ym)}
+              </th>
+            ))}
+          </tr>
+          <tr class="wrow">
             <th class="rowhead">Payment</th>
-            {rows.map((w) => (
-              <th class={isNow(w) ? 'now' : ''}>{weekLabel(w.start)}</th>
+            {rows.map((w, i) => (
+              <th class={col(w, i)}>{weekLabel(w.start)}</th>
             ))}
           </tr>
         </thead>
@@ -155,8 +179,8 @@ function SheetGrid({ state, rows, today, who, nav }: { state: State; rows: WeekR
               <td class="rowhead">
                 <span class={`pdot ${state.people[a.owner]?.tone || ''}`} /> {a.name} — start of week
               </td>
-              {rows.map((w) => (
-                <td class={`cell ${isNow(w) ? 'now' : ''}`}>{money(w.open[a.id])}</td>
+              {rows.map((w, i) => (
+                <td class={`cell ${col(w, i)}`}>{money(w.open[a.id])}</td>
               ))}
             </tr>
           ))}
@@ -164,8 +188,8 @@ function SheetGrid({ state, rows, today, who, nav }: { state: State; rows: WeekR
             <>
               <tr class="grp">
                 <td class="rowhead">{g}</td>
-                {rows.map(() => (
-                  <td />
+                {rows.map((w, i) => (
+                  <td class={`gcell ${col(w, i)}`} />
                 ))}
               </tr>
               {list.map((i) => (
@@ -177,13 +201,13 @@ function SheetGrid({ state, rows, today, who, nav }: { state: State; rows: WeekR
                       {i.currency === 'ZAR' && <span class="tag">R</span>}
                     </button>
                   </td>
-                  {rows.map((w) => {
+                  {rows.map((w, ci) => {
                     const list2 = cells.get(`${i.id}|${w.start}`) || [];
                     const sum = list2.reduce((s, o) => s + o.gbp, 0);
                     const paid = list2.length > 0 && list2.every((o) => o.paid || o.item.kind === 'budget');
                     const changed = list2.some((o) => o.changed || o.moved);
                     return (
-                      <td class={`cell ${isNow(w) ? 'now' : ''} ${paid && list2.some((o) => o.paid) ? 'paid' : ''} ${changed ? 'changed' : ''}`}>
+                      <td class={`cell ${col(w, ci)} ${paid && list2.some((o) => o.paid) ? 'paid' : ''} ${changed ? 'changed' : ''}`}>
                         {list2.length > 0 && (
                           <button onClick={() => nav.openOcc(list2[0].key)} title={list2.map((o) => `${nice(o.date)} ${money(o.amount, o.item.currency)}${o.paid ? ' · paid' : ''}`).join('\n')}>
                             <span class={sum > 0 ? 'pos' : ''}>{fmt(sum)}</span>
@@ -203,8 +227,8 @@ function SheetGrid({ state, rows, today, who, nav }: { state: State; rows: WeekR
                 <td class="rowhead">
                   <span class={`pdot ${p.tone}`} /> {p.name} — out this week
                 </td>
-                {rows.map((w) => (
-                  <td class={`cell ${isNow(w) ? 'now' : ''}`}>{fmt(-(w.outGBP[p.id] || 0))}</td>
+                {rows.map((w, i) => (
+                  <td class={`cell ${col(w, i)}`}>{fmt(-(w.outGBP[p.id] || 0))}</td>
                 ))}
               </tr>
             ))}
@@ -213,8 +237,8 @@ function SheetGrid({ state, rows, today, who, nav }: { state: State; rows: WeekR
               <td class="rowhead">
                 <span class={`pdot ${state.people[a.owner]?.tone || ''}`} /> {a.name} — end of week
               </td>
-              {rows.map((w) => (
-                <td class={`cell ${isNow(w) ? 'now' : ''} ${w.close[a.id] < 0 ? 'neg' : ''}`}>{money(w.close[a.id])}</td>
+              {rows.map((w, i) => (
+                <td class={`cell ${col(w, i)} ${w.close[a.id] < 0 ? 'neg' : ''}`}>{money(w.close[a.id])}</td>
               ))}
             </tr>
           ))}
