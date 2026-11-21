@@ -4,7 +4,7 @@ import { money } from '../engine/money';
 import { weeks, type WeekRow } from '../engine/plan';
 import type { Item, Occ, State } from '../engine/types';
 import { live } from '../engine/types';
-import { Seg } from '../ui';
+import { Icon, Seg } from '../ui';
 import { OccRow } from './rows';
 import type { Nav } from '../app';
 
@@ -18,6 +18,8 @@ type Who = 'all' | string;
 
 /** A week belongs to the month its Monday is in — the same as the sheet's columns. */
 export const monthOf = (w: WeekRow) => w.start.slice(0, 7);
+/** The day a payment added in this week starts on: today in the current week, otherwise its Monday. */
+const dayFor = (w: WeekRow, today: string) => (today >= w.start && today <= w.end ? today : w.start);
 const mClass = (w: WeekRow) => `m${w.start.slice(5, 7)}`;
 const monthTitle = (ym: string) => `${monthName(+ym.slice(5, 7), true)} ${ym.slice(0, 4)}`;
 
@@ -46,6 +48,9 @@ export function Weeks({ state, today, nav, wide }: { state: State; today: string
           onChange={setWho}
           options={[{ v: 'all', label: 'Both' }, ...people.map((p) => ({ v: p.id, label: <><span class={`pdot ${p.tone}`} />{p.name}</> }))]}
         />
+        <button class="btn small primary" onClick={() => nav.newItem(who === 'all' ? undefined : who, today)}>
+          <Icon name="plus" /> Add payment
+        </button>
         {back === 0 && (
           <button class="btn small ghost" onClick={() => setBack(4)}>
             Show earlier weeks
@@ -113,6 +118,9 @@ function WeekCard({ state, w, today, filt, nav, who }: { state: State; w: WeekRo
         </>
       ))}
       {!occs.length && <div class="empty" style={{ padding: '18px' }}>Nothing this week.</div>}
+      <button class="btn small ghost addpay" onClick={() => nav.newItem(who === 'all' ? undefined : who, dayFor(w, today))} aria-label={`Add a payment in the week ${weekLabel(w.start)}`}>
+        <Icon name="plus" /> Add a payment this week
+      </button>
       <div class="w-bal">
         {accounts.map((a) => (
           <span>
@@ -230,6 +238,20 @@ function SheetGrid({ state, rows, today, who, nav }: { state: State; rows: WeekR
               ))}
             </>
           ))}
+          <tr class="addrow">
+            <td class="rowhead">
+              <button class="addlink" onClick={() => nav.newItem(who === 'all' ? undefined : who, today)}>
+                <Icon name="plus" /> Add a payment
+              </button>
+            </td>
+            {rows.map((w, i) => (
+              <td class={`cell ${col(w, i)}`}>
+                <button class="addcell" onClick={() => nav.newItem(who === 'all' ? undefined : who, dayFor(w, today))} aria-label={`Add a payment in the week ${weekLabel(w.start)}`} title={`Add a payment in the week ${weekLabel(w.start)}`}>
+                  <Icon name="plus" />
+                </button>
+              </td>
+            ))}
+          </tr>
           {live(state.people)
             .filter((p) => who === 'all' || p.id === who)
             .map((p) => (

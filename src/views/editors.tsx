@@ -175,7 +175,8 @@ export function OccSheet({ state, occKey, onClose, onEditItem }: { state: State;
 
 // ======================= whole payment =======================
 
-export function newItem(state: State, person: string): Item {
+/** A new payment. With `date` it starts as a one-off on that day (from the Weeks screen); the editor can make it monthly/weekly. */
+export function newItem(state: State, person: string, date?: string): Item {
   const acct = live(state.accounts).find((a) => a.owner === person) || live(state.accounts)[0];
   return {
     id: newId('i'),
@@ -187,7 +188,7 @@ export function newItem(state: State, person: string): Item {
     kind: 'bill',
     group: 'Living',
     amount: 0,
-    schedule: { kind: 'monthly', days: [1], start: todayUK().slice(0, 8) + '01' },
+    schedule: date ? { kind: 'once', dates: [date] } : { kind: 'monthly', days: [1], start: todayUK().slice(0, 8) + '01' },
     dayConfirmed: true,
     remind: true,
   };
@@ -209,7 +210,7 @@ export function ItemEditor({ state, item: initial, onClose }: { state: State; it
   const next = nextOccurrence(state, it, today);
 
   const switchKind = (k: Schedule['kind']) => {
-    const start = s.kind === 'monthly' || s.kind === 'weekly' ? s.start : today;
+    const start = s.kind === 'monthly' || s.kind === 'weekly' ? s.start : s.kind === 'once' && s.dates[0] ? s.dates[0] : today;
     if (k === 'monthly') setSched({ kind: 'monthly', days: s.kind === 'monthly' ? s.days : [Number(start.slice(8))], start: start.slice(0, 8) + '01' });
     else if (k === 'weekly') setSched({ kind: 'weekly', every: 1, start });
     else if (k === 'once') setSched({ kind: 'once', dates: s.kind === 'once' ? s.dates : [next?.date || today] });

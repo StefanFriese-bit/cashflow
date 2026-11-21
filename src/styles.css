@@ -1625,3 +1625,51 @@ table.grid td.cell.checked small.chk {
 table.grid td.cell.checked small.was {
   color: var(--ink-2);
 }
+
+/* ---------- add a payment from the Weeks screen ---------- */
+.week .addpay {
+  display: flex;
+  margin: 6px 12px 2px;
+  gap: 6px;
+}
+table.grid tr.addrow td.cell {
+  text-align: center;
+  padding: 2px 4px;
+}
+table.grid tr.addrow button.addcell {
+  border: 1px dashed var(--ink-2);
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: 8px;
+  width: 34px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+  cursor: pointer;
+}
+table.grid tr.addrow button.addcell:hover,
+table.grid tr.addrow button.addcell:focus-visible {
+  opacity: 1;
+}
+table.grid tr.addrow button.addcell svg {
+  width: 16px;
+  height: 16px;
+}
+table.grid tr.addrow button.addlink {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+table.grid tr.addrow button.addlink svg {
+  width: 16px;
+  height: 16px;
+}

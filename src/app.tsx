@@ -19,7 +19,7 @@ export interface Nav {
   go: (r: Route, params?: Record<string, string>) => void;
   openOcc: (key: string) => void;
   openItem: (id: string) => void;
-  newItem: (person?: string) => void;
+  newItem: (person?: string, date?: string) => void;
 }
 
 function parseHash(): { route: Route; params: Record<string, string> } {
@@ -117,7 +117,7 @@ export function App() {
       setOccKey(null);
       setItemId(id);
     },
-    newItem: (person) => setDraft(newItem(state, person || meId || live(state.people)[0]?.id || '')),
+    newItem: (person, date) => setDraft(newItem(state, person || meId || live(state.people)[0]?.id || '', date)),
   };
 
   const people = live(state.people);
