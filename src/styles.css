@@ -1608,3 +1608,20 @@ h3 svg {
   padding: 7px 6px;
   white-space: nowrap;
 }
+
+/* ---------- start-of-week cell holding a real figure you entered that week ---------- */
+table.grid td.cell.checked small {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.25;
+  font-weight: 500;
+  white-space: nowrap;
+}
+table.grid td.cell.checked small.chk {
+  color: var(--good, #2f7d4f);
+  font-weight: 650;
+  margin-top: 1px;
+}
+table.grid td.cell.checked small.was {
+  color: var(--ink-2);
+}

@@ -1,5 +1,5 @@
 import { addDays, addMonths, daysInMonth, diffDays, iso, monthEnd, monthStart, ordinal, parse, short, weekStart, weekday, ymd, dayName, monthName } from './dates';
-import type { Currency, ISODate, Item, Occ, Schedule, State } from './types';
+import type { Balance, Currency, ISODate, Item, Occ, Schedule, State } from './types';
 import { live } from './types';
 
 // ---------- money ----------
@@ -201,6 +201,8 @@ export interface WeekRow {
   occs: Occ[];
   open: Record<string, number>; // per account, balance at start of the week
   close: Record<string, number>; // per account, end of week
+  /** per account: the newest real figure you entered inside this week (not the sheet's starting placeholders) */
+  checked: Record<string, Balance | undefined>;
   inGBP: Record<string, number>; // per person
   outGBP: Record<string, number>; // per person
 }
@@ -220,9 +222,12 @@ export function weeks(state: State, from: ISODate, count: number): WeekRow[] {
     const occs = all.filter((o) => o.date >= ws && o.date <= we);
     const open: Record<string, number> = {};
     const close: Record<string, number> = {};
+    const checked: Record<string, Balance | undefined> = {};
     for (const a of accounts) {
       open[a.id] = balanceAt(state, a.id, addDays(ws, -1), all);
       close[a.id] = balanceAt(state, a.id, we, all);
+      const c = latestBalance(state, a.id, we);
+      checked[a.id] = c && c.date >= ws && !c.id.endsWith('-start') ? c : undefined;
     }
     const inGBP: Record<string, number> = {};
     const outGBP: Record<string, number> = {};
@@ -231,7 +236,7 @@ export function weeks(state: State, from: ISODate, count: number): WeekRow[] {
       if (o.gbp > 0) inGBP[p] = (inGBP[p] || 0) + o.gbp;
       else outGBP[p] = (outGBP[p] || 0) - o.gbp;
     }
-    rows.push({ start: ws, end: we, occs, open, close, inGBP, outGBP });
+    rows.push({ start: ws, end: we, occs, open, close, checked, inGBP, outGBP });
   }
   return rows;
 }

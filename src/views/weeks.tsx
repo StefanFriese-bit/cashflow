@@ -179,9 +179,19 @@ function SheetGrid({ state, rows, today, who, nav }: { state: State; rows: WeekR
               <td class="rowhead">
                 <span class={`pdot ${state.people[a.owner]?.tone || ''}`} /> {a.name} — start of week
               </td>
-              {rows.map((w, i) => (
-                <td class={`cell ${col(w, i)}`}>{money(w.open[a.id])}</td>
-              ))}
+              {rows.map((w, i) => {
+                // a real figure you entered this week wins over the Monday estimate
+                const c = w.checked[a.id];
+                return c ? (
+                  <td class={`cell checked ${col(w, i)} ${c.amount < 0 ? 'neg' : ''}`} title={`You entered ${money(c.amount)} as at the start of ${nice(c.date)}. The app had worked out ${money(w.open[a.id])} for Monday.`}>
+                    {money(c.amount)}
+                    <small class="chk">checked {nice(c.date).slice(0, 6).trim()}</small>
+                    <small class="was">Mon {money(w.open[a.id])}</small>
+                  </td>
+                ) : (
+                  <td class={`cell ${col(w, i)}`}>{money(w.open[a.id])}</td>
+                );
+              })}
             </tr>
           ))}
           {groups.map(([g, list]) => (
