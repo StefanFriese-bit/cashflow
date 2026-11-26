@@ -8,6 +8,7 @@ import { me, newId, saveBalance, saveSettings } from '../store';
 import { Banner, Field, Icon, MoneyInput, Sheet } from '../ui';
 import { BalanceChart } from './chart';
 import { OccRow } from './rows';
+import { SendCard, SendSheet } from './send';
 import type { Nav } from '../app';
 
 export function greeting(now = new Date()): string {
@@ -46,7 +47,8 @@ export function useLiveRate(): { rate: number; date: string } | null {
 }
 
 export function Today({ state, today, nav }: { state: State; today: string; nav: Nav }) {
-  const [balSheet, setBalSheet] = useState(false);
+  const [balSheet, setBalSheet] = useState<false | string>(false);
+  const [sendSheet, setSendSheet] = useState(false);
   const accounts = live(state.accounts);
   const people = state.people;
   const meId = me();
@@ -92,7 +94,7 @@ export function Today({ state, today, nav }: { state: State; today: string; nav:
 
       <div>
         {stale && (
-          <Banner kind="warn" icon="alert" action={<button class="btn small" onClick={() => setBalSheet(true)}>Update</button>}>
+          <Banner kind="warn" icon="alert" action={<button class="btn small" onClick={() => setBalSheet(today)}>Update</button>}>
             <b>Check your bank balances.</b> {placeholder ? 'The app starts from the sheet’s £1,000 starting figures.' : oldestCheck ? `Last entered ${short(oldestCheck.date)}.` : 'None entered yet.'} Enter today’s figures so the forecast is exact.
           </Banner>
         )}
@@ -110,7 +112,7 @@ export function Today({ state, today, nav }: { state: State; today: string; nav:
           const eom = balanceAt(state, a.id, monthEnd(today));
           const low = lowestPoint(state, a.id, today, addDays(today, 90));
           return (
-            <button class={`acct ${p?.tone || ''}`} style={{ textAlign: 'left' }} onClick={() => setBalSheet(true)} aria-label={`${a.name}: ${money(now)} today. Tap to enter the real balance.`}>
+            <button class={`acct ${p?.tone || ''}`} style={{ textAlign: 'left' }} onClick={() => setBalSheet(today)} aria-label={`${a.name}: ${money(now)} today. Tap to enter the real balance.`}>
               <div class="label">
                 {a.name} <span class="muted">· {p?.name}</span>
               </div>
@@ -131,6 +133,8 @@ export function Today({ state, today, nav }: { state: State; today: string; nav:
           );
         })}
       </div>
+
+      <SendCard state={state} today={today} liveRate={live_?.rate} onOpen={() => setSendSheet(true)} />
 
       <div class="cols">
         <div>
@@ -254,7 +258,20 @@ export function Today({ state, today, nav }: { state: State; today: string; nav:
           </div>
         </div>
       </div>
-      {balSheet && <BalanceSheet state={state} today={today} onClose={() => setBalSheet(false)} />}
+      {sendSheet && (
+        <SendSheet
+          state={state}
+          today={today}
+          liveRate={live_?.rate}
+          liveDate={live_?.date}
+          onClose={() => setSendSheet(false)}
+          onEnterBalance={(d) => {
+            setSendSheet(false);
+            setBalSheet(d);
+          }}
+        />
+      )}
+      {balSheet && <BalanceSheet state={state} today={today} date={balSheet} onClose={() => setBalSheet(false)} />}
     </div>
   );
 }
@@ -271,10 +288,10 @@ function RateEffect({ state, today, live }: { state: State; today: string; live:
   );
 }
 
-export function BalanceSheet({ state, today, onClose }: { state: State; today: string; onClose: () => void }) {
+export function BalanceSheet({ state, today, date: startDate, onClose }: { state: State; today: string; date?: string; onClose: () => void }) {
   const accounts = live(state.accounts);
   const [vals, setVals] = useState<Record<string, number | null>>({});
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useState(startDate || today);
   const history = live(state.balances).sort((a, b) => (a.date < b.date ? 1 : -1));
   return (
     <Sheet title="Bank balances" onClose={onClose}>

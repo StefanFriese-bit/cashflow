@@ -55,6 +55,9 @@ export interface Item extends Rec {
   remind: boolean;
   loan?: string; // repays this loan
   goal?: string; // saves towards this goal
+  /** A credit-card payment in rand: on pay day it gets whatever is left after the transfer to the UK.
+   *  Unset = guessed from the name ("card"). */
+  card?: boolean;
   note?: string;
 }
 
@@ -108,6 +111,7 @@ export interface Settings {
   rate: number; // rand per pound used for planning
   trackFrom: ISODate; // payments before this date are history: never "not ticked yet"
   remindDays: number; // how many days ahead a payment counts as "due soon"
+  sendCushion?: number; // pounds added on top of the pay-day transfer to the UK, as a safety margin
   u: number;
 }
 

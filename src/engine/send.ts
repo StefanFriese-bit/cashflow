@@ -1,0 +1,148 @@
+// Pay day: how much of a rand salary to send to the UK so the UK account lasts until the next pay day,
+// and what is left in South Africa for the credit cards.
+//
+// The UK side only counts POUND payments that go out of the person's own UK account. The SA side only counts
+// RAND payments. The salary itself never counts as money already in the UK account.
+
+import { addDays } from './dates';
+import { latestBalance, occurrences } from './plan';
+import type { Balance, ISODate, Item, Occ, State } from './types';
+import { live } from './types';
+
+export interface SendPlan {
+  person: string;
+  account: string; // the UK account the money goes to
+  payItem: Item;
+  pay: Occ; // this pay day's salary payment
+  payDay: ISODate;
+  until: ISODate; // last day the money has to last (the day before the next pay day)
+  nextPay?: Occ;
+  salary: number; // rand
+
+  ukOut: Occ[]; // pound payments out of the UK account, pay day … until
+  ukTotal: number;
+  /** What the UK account holds the morning of pay day, before the transfer lands (pounds). */
+  startBal: number;
+  anchor?: Balance; // the bank figure that start is worked out from
+  anchorIsPlaceholder: boolean;
+  cushion: number;
+  needGBP: number;
+  rate: number;
+  sendZAR: number; // rounded up to the next R100
+  sendGBP: number; // what sendZAR buys at `rate`
+
+  randOut: Occ[]; // rand payments that come out of the salary first (debit orders, loans …)
+  randTotal: number;
+  cards: Occ[]; // rand credit-card payments already in the plan (the leftover replaces them)
+  cardsPlanned: number;
+  otherIn: Occ[]; // other rand money coming in during the month (not counted)
+  leftForCards: number; // rand
+}
+
+export function isCard(item: Item): boolean {
+  return item.card ?? /\bcards?\b/i.test(item.name);
+}
+
+/** The person's rand salary: their biggest monthly rand income. */
+export function payItemFor(state: State, person: string): Item | undefined {
+  return live(state.items)
+    .filter((i) => i.person === person && i.kind === 'income' && i.currency === 'ZAR' && i.schedule.kind === 'monthly')
+    .sort((a, b) => b.amount - a.amount)[0];
+}
+
+/** The UK account the person pays from. */
+export function ukAccountFor(state: State, person: string): string | undefined {
+  return live(state.accounts).find((a) => a.owner === person)?.id;
+}
+
+/**
+ * Which pay day to plan for, seen from `today`:
+ * - the salary was due in the last 10 days but is not ticked as received yet → it is still coming: today;
+ * - it was ticked as received in the last 10 days → that day;
+ * - otherwise the next one.
+ */
+export function defaultPayDay(state: State, payItem: Item, today: ISODate): ISODate | undefined {
+  const one = { ...state, items: { [payItem.id]: payItem } };
+  const recent = occurrences(one, addDays(today, -10), today);
+  const last = recent[recent.length - 1];
+  if (last) return last.paid ? last.date : today;
+  return occurrences(one, addDays(today, 1), addDays(today, 70))[0]?.date;
+}
+
+export function sendPlan(
+  state: State,
+  opts: { person: string; payDay: ISODate; rate: number; cushion?: number },
+): SendPlan | undefined {
+  const { person, payDay, rate } = opts;
+  const payItem = payItemFor(state, person);
+  const account = ukAccountFor(state, person);
+  if (!payItem || !account || !(rate > 0)) return undefined;
+  const one = { ...state, items: { [payItem.id]: payItem } };
+
+  // this month's salary: the one nearest the chosen day (it may be late, early, or moved)
+  const around = occurrences(one, addDays(payDay, -20), addDays(payDay, 20));
+  const pay = around.slice().sort((a, b) => Math.abs(diff(a.date, payDay)) - Math.abs(diff(b.date, payDay)))[0];
+  if (!pay) return undefined;
+  const nextPay = occurrences(one, addDays(payDay, 1), addDays(payDay, 70)).find((o) => o.key !== pay.key && o.orig > pay.orig);
+  const until = nextPay ? addDays(nextPay.date, -1) : addDays(payDay, 30);
+  const salary = pay.amount;
+
+  const month = occurrences(state, payDay, until);
+  // paid or not: a payment ticked off after the transfer was still paid with the transferred money
+  const ukOut = month.filter((o) => o.item.account === account && o.item.currency === 'GBP' && o.gbp < 0);
+  const ukTotal = sum(ukOut);
+
+  // the UK account the morning of pay day: the newest figure entered on or before that day,
+  // plus the pound payments in and out since then (rand ones belong to the South African side)
+  const anchor = latestBalance(state, account, payDay);
+  let startBal = 0;
+  if (anchor) {
+    const since = anchor.date < payDay ? occurrences(state, anchor.date, addDays(payDay, -1)) : [];
+    startBal = anchor.amount + since.filter((o) => o.item.account === account && o.item.currency === 'GBP').reduce((s, o) => s + o.gbp, 0);
+  }
+
+  const cushion = Math.max(0, opts.cushion ?? state.settings.sendCushion ?? 0);
+  const needGBP = Math.max(0, ukTotal - startBal + cushion);
+  const sendZAR = needGBP > 0 ? Math.ceil((needGBP * rate) / 100) * 100 : 0;
+
+  const rand = month.filter((o) => o.item.currency === 'ZAR');
+  const randBills = rand.filter((o) => o.item.kind !== 'income');
+  const cards = randBills.filter((o) => isCard(o.item));
+  const randOut = randBills.filter((o) => !isCard(o.item));
+  const randTotal = sum(randOut);
+  const otherIn = rand.filter((o) => o.item.kind === 'income' && o.key !== pay.key);
+
+  return {
+    person,
+    account,
+    payItem,
+    pay,
+    payDay,
+    until,
+    nextPay,
+    salary,
+    ukOut,
+    ukTotal,
+    startBal,
+    anchor,
+    anchorIsPlaceholder: !!anchor?.id.endsWith('-start'),
+    cushion,
+    needGBP,
+    rate,
+    sendZAR,
+    sendGBP: sendZAR / rate,
+    randOut,
+    randTotal,
+    cards,
+    cardsPlanned: sum(cards),
+    otherIn,
+    leftForCards: salary - sendZAR - randTotal,
+  };
+}
+
+function sum(list: Occ[]): number {
+  return list.reduce((s, o) => s + o.amount, 0);
+}
+function diff(a: ISODate, b: ISODate): number {
+  return (Date.parse(a) - Date.parse(b)) / 86400000;
+}
