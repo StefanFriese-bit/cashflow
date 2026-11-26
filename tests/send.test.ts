@@ -34,11 +34,13 @@ describe('pay day: send to the UK', () => {
 
   test('covers the UK payments until the day before the next pay day, less what is already there', () => {
     const p = sendPlan(home(), { person: 'a', payDay: '2026-11-25', rate: 20 })!;
-    expect(p.until).toBe('2026-12-24');
-    // food on 30/11, 7/12, 14/12, 21/12 + rent 1/12 (food on 23/11 is before pay day)
+    // whole weeks: Mon 23 Nov (pay day Wed 25th) to Sun 20 Dec (next pay day Fri 25 Dec is in the week of the 21st)
+    expect(p.from).toBe('2026-11-23');
+    expect(p.until).toBe('2026-12-20');
+    // food on Mondays 23/11, 30/11, 7/12, 14/12 + rent 1/12
     expect(p.ukOut.map((o) => o.item.id).sort()).toEqual(['food', 'food', 'food', 'food', 'rent']);
     expect(p.ukTotal).toBe(1400);
-    // £300 on 20/11, then food £100 on Mon 23/11
+    // £300 entered Fri 20/11; Monday 16/11's food is still on the list, so it still has to come out
     expect(p.startBal).toBe(200);
     expect(p.needGBP).toBe(1200);
     expect(p.sendZAR).toBe(24000);
@@ -62,6 +64,20 @@ describe('pay day: send to the UK', () => {
     const p = sendPlan(s, { person: 'a', payDay: '2026-11-25', rate: 20 })!;
     expect(p.startBal).toBe(-600);
     expect(p.needGBP).toBe(2000);
+  });
+
+  test('a payment still on the list counts whatever its day; removed, it is gone', () => {
+    const s = home();
+    // rent dated Tue 24/11 (before pay day), a bank figure entered Thu 26/11: the rent is still to pay
+    s.items.rent2 = { ...s.items.rent, id: 'rent2', name: 'Late rent', amount: 700, schedule: { kind: 'once', dates: ['2026-11-24'] } };
+    s.balances.b2 = { id: 'b2', account: 'uk', date: '2026-11-26', amount: 500, u: 1 };
+    const p = sendPlan(s, { person: 'a', payDay: '2026-11-26', rate: 20 })!;
+    expect(p.ukOut.map((o) => o.item.id)).toContain('rent2');
+    expect(p.startBal).toBe(500);
+    expect(p.ukTotal).toBe(2100);
+    // he pays it and removes it from the list
+    const s2 = { ...s, overrides: { ...s.overrides, 'rent2|2026-11-24': { id: 'rent2|2026-11-24', item: 'rent2', date: '2026-11-24', skip: true, u: 2 } } };
+    expect(sendPlan(s2, { person: 'a', payDay: '2026-11-26', rate: 20 })!.ukTotal).toBe(1400);
   });
 
   test('a figure entered on pay day morning is the starting point', () => {

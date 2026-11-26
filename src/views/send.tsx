@@ -36,7 +36,7 @@ export function SendCard({ state, today, liveRate, onOpen }: { state: State; tod
       <div class="send-row">
         <div>
           <div class="num send-big">{money(p.sendZAR, 'ZAR')}</div>
-          <div class="muted small">≈ {money(p.sendGBP)} · lasts until {nice(p.until)}</div>
+          <div class="muted small">≈ {money(p.sendGBP)} · covers to {nice(p.until)}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div class={`num send-mid ${p.leftForCards < 0 ? 'neg' : ''}`}>{money(p.leftForCards, 'ZAR')}</div>
@@ -69,9 +69,9 @@ export function SendSheet({ state, today, liveRate, liveDate, onClose, onEnterBa
   }
 
   const acct = state.accounts[p.account]?.name || 'UK account';
-  // payments since the bank figure that make up "before the money lands"
-  const since = p.anchor && p.anchor.date < p.payDay ? occurrences(state, p.anchor.date, addDays(p.payDay, -1)).filter((o) => o.item.account === p.account && o.item.currency === 'GBP') : [];
-  const onNextPayDay = p.nextPay ? occurrences(state, p.nextPay.date, p.nextPay.date).filter((o) => o.item.account === p.account && o.item.currency === 'GBP' && o.gbp < 0) : [];
+  const since = p.since;
+  // the next pay day's week, up to the day the money comes: paid from the NEXT transfer, which may land late
+  const onNextPayDay = p.nextPay ? occurrences(state, addDays(p.until, 1), p.nextPay.date).filter((o) => o.item.account === p.account && o.item.currency === 'GBP' && o.gbp < 0) : [];
   const nextDayTotal = onNextPayDay.reduce((s, o) => s + o.amount, 0);
 
   return (
@@ -80,7 +80,7 @@ export function SendSheet({ state, today, liveRate, liveDate, onClose, onEnterBa
         <div class="eyebrow">Send from South Africa</div>
         <div class="num send-hero">{money(p.sendZAR, 'ZAR')}</div>
         <div class="muted small">
-          = {money(p.sendGBP)} at R{round2(p.rate)} to the pound · lasts {nice(p.payDay)} – {nice(p.until)}
+          = {money(p.sendGBP)} at R{round2(p.rate)} to the pound · covers the weeks {nice(p.from)} – {nice(p.until)}
         </div>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '10px' }}>
           <button
@@ -121,7 +121,7 @@ export function SendSheet({ state, today, liveRate, liveDate, onClose, onEnterBa
       <div class="card">
         <button class="kv send-kv-btn" onClick={() => setShowUk(!showUk)} aria-expanded={showUk}>
           <span>
-            {p.ukOut.length} payments {short(p.payDay, false)} – {short(p.until, false)} <span class="muted">{showUk ? 'hide' : 'show'}</span>
+            {p.ukOut.length} payments, weeks {short(p.from, false)} – {short(p.until, false)} <span class="muted">{showUk ? 'hide' : 'show'}</span>
           </span>
           <b class="num">{money(p.ukTotal, 'GBP', { exact: true })}</b>
         </button>
@@ -139,7 +139,7 @@ export function SendSheet({ state, today, liveRate, liveDate, onClose, onEnterBa
               {p.anchor ? (
                 <>
                   {money(p.anchor.amount, 'GBP', { exact: true })} you entered for {nice(p.anchor.date)}
-                  {since.length > 0 && <>, then {since.map((o) => `${o.item.name} ${money(Math.abs(o.gbp))}${o.paid ? '' : ' (not ticked)'}`).join(', ')}</>}
+                  {since.length > 0 && <>, then {since.map((o) => `${o.item.name} ${money(Math.abs(o.gbp))}${o.paid ? '' : ' (still on the list)'}`).join(', ')}</>}
                 </>
               ) : (
                 'No bank figure entered yet.'
@@ -169,7 +169,7 @@ export function SendSheet({ state, today, liveRate, liveDate, onClose, onEnterBa
         </div>
         {onNextPayDay.length > 0 && (
           <p class="small muted" style={{ margin: '6px 0 0' }}>
-            Not in this month: {onNextPayDay.map((o) => o.item.name).join(', ')} ({money(nextDayTotal)}) fall on the next pay day, {nice(p.nextPay!.date)}, and come out of that transfer. If a transfer takes a day or two to land, they need money already in {acct}.
+            Not in this month: {[...new Set(onNextPayDay.map((o) => o.item.name))].join(', ')} ({money(nextDayTotal)}) are in the next pay day’s week ({nice(p.nextPay!.date)}) and come out of that transfer. If it takes a day or two to land, they need money already in {acct}.
           </p>
         )}
       </div>
@@ -199,7 +199,7 @@ export function SendSheet({ state, today, liveRate, liveDate, onClose, onEnterBa
             ))}
           </>
         )}
-        <p class="small muted" style={{ margin: '8px 0 0' }}>Tap “card” on a line to say whether it is a credit card (it then gets the leftover instead of being paid first).</p>
+        <p class="small muted" style={{ margin: '8px 0 0' }}>Every payment still on the list in these weeks counts, whatever its day — remove it once it is paid. Tap “card” on a line to say whether it is a credit card (it then gets the leftover instead of being paid first).</p>
         {p.otherIn.length > 0 && (
           <p class="small muted" style={{ margin: '8px 0 0' }}>
             Not counted: {p.otherIn.map((o) => `${o.item.name} ${money(o.amount, 'ZAR')} on ${nice(o.date)}`).join(', ')}.

@@ -77,7 +77,31 @@ describe('balances', () => {
   test('a newer balance you type in wins over the plan', () => {
     const s = fixture();
     s.balances.b3 = { id: 'b3', account: 'acc1', date: '2026-11-11', amount: 1000, u: 2 };
-    // the R2,000 on the 11th counts after the balance entered "at the start of" the 11th
+    // the R2,000 on the 11th counts after the balance entered "at the start of" the 11th, and so does Monday's
+    // food (£100): it is still on the list, so it has not been paid yet — the week counts, not the day
+    expect(balanceAt(s, 'acc1', '2026-11-11')).toBe(800);
+  });
+  test('a payment still on the list counts anywhere in its week; once removed it is gone', () => {
+    const s = fixture();
+    s.balances.b3 = { id: 'b3', account: 'acc1', date: '2026-11-12', amount: 1000, u: 2 };
+    // Mon 9th food £100 + Wed 11th R2,000 (£100) are both still on the list
+    expect(balanceAt(s, 'acc1', '2026-11-15')).toBe(800);
+    // (the app makes a new copy of the plan on every change)
+    const s2 = { ...s, overrides: { ...s.overrides, 'food|2026-11-09': { id: 'food|2026-11-09', item: 'food', date: '2026-11-09', skip: true, u: 3 } } };
+    expect(balanceAt(s2, 'acc1', '2026-11-15')).toBe(900);
+    // the week sheet agrees: that week closes on the same figure
+    expect(weeks(s2, '2026-11-09', 1)[0].close.acc1).toBe(900);
+  });
+  test('older weeks are settled by a newer bank figure', () => {
+    const s = fixture();
+    s.balances.b3 = { id: 'b3', account: 'acc1', date: '2026-11-17', amount: 1000, u: 2 };
+    // Mon 16th food counts (same week), the 9th and 11th do not (an older week)
+    expect(balanceAt(s, 'acc1', '2026-11-17')).toBe(900);
+  });
+  test('a ticked-off payment keeps the day it was paid', () => {
+    const s = fixture();
+    s.balances.b3 = { id: 'b3', account: 'acc1', date: '2026-11-11', amount: 1000, u: 2 };
+    s.overrides['food|2026-11-09'] = { id: 'food|2026-11-09', item: 'food', date: '2026-11-09', paid: { on: '2026-11-09', amount: 100, by: 'a' }, u: 3 };
     expect(balanceAt(s, 'acc1', '2026-11-11')).toBe(900);
   });
   test('weeks run Monday to Sunday with matching open and close', () => {

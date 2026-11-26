@@ -4,8 +4,8 @@
 // The UK side only counts POUND payments that go out of the person's own UK account. The SA side only counts
 // RAND payments. The salary itself never counts as money already in the UK account.
 
-import { addDays } from './dates';
-import { latestBalance, occurrences } from './plan';
+import { addDays, weekStart } from './dates';
+import { balDate, latestBalance, occurrences } from './plan';
 import type { Balance, ISODate, Item, Occ, State } from './types';
 import { live } from './types';
 
@@ -15,7 +15,8 @@ export interface SendPlan {
   payItem: Item;
   pay: Occ; // this pay day's salary payment
   payDay: ISODate;
-  until: ISODate; // last day the money has to last (the day before the next pay day)
+  from: ISODate; // Monday of the pay-day week: payments count by week, not by exact day
+  until: ISODate; // last day the money has to last (the Sunday before the next pay day's week)
   nextPay?: Occ;
   salary: number; // rand
 
@@ -25,6 +26,7 @@ export interface SendPlan {
   startBal: number;
   anchor?: Balance; // the bank figure that start is worked out from
   anchorIsPlaceholder: boolean;
+  since: Occ[]; // payments between that figure and the pay-day week
   cushion: number;
   needGBP: number;
   rate: number;
@@ -84,21 +86,27 @@ export function sendPlan(
   const pay = around.slice().sort((a, b) => Math.abs(diff(a.date, payDay)) - Math.abs(diff(b.date, payDay)))[0];
   if (!pay) return undefined;
   const nextPay = occurrences(one, addDays(payDay, 1), addDays(payDay, 70)).find((o) => o.key !== pay.key && o.orig > pay.orig);
-  const until = nextPay ? addDays(nextPay.date, -1) : addDays(payDay, 30);
+  // whole weeks: from the Monday of the pay-day week to the Sunday before the next pay day's week
+  const from = weekStart(payDay);
+  const until = nextPay ? addDays(weekStart(nextPay.date), -1) : addDays(from, 34);
   const salary = pay.amount;
 
-  const month = occurrences(state, payDay, until);
+  // The UK account before the transfer lands: the newest figure entered on or before pay day. A payment still on
+  // the list counts from that figure on, whatever its day in the week (see balDate); one removed is gone.
+  const anchor = latestBalance(state, account, payDay);
+  const after = (o: Occ) => !anchor || balDate(state, o) >= anchor.date;
+  const ukGBP = (o: Occ) => o.item.account === account && o.item.currency === 'GBP';
+
+  const month = occurrences(state, from, until);
   // paid or not: a payment ticked off after the transfer was still paid with the transferred money
-  const ukOut = month.filter((o) => o.item.account === account && o.item.currency === 'GBP' && o.gbp < 0);
+  const ukOut = month.filter((o) => ukGBP(o) && o.gbp < 0 && after(o));
   const ukTotal = sum(ukOut);
 
-  // the UK account the morning of pay day: the newest figure entered on or before that day,
-  // plus the pound payments in and out since then (rand ones belong to the South African side)
-  const anchor = latestBalance(state, account, payDay);
   let startBal = 0;
+  let since: Occ[] = [];
   if (anchor) {
-    const since = anchor.date < payDay ? occurrences(state, anchor.date, addDays(payDay, -1)) : [];
-    startBal = anchor.amount + since.filter((o) => o.item.account === account && o.item.currency === 'GBP').reduce((s, o) => s + o.gbp, 0);
+    if (anchor.date < from) since = occurrences(state, weekStart(anchor.date), addDays(from, -1)).filter((o) => ukGBP(o) && after(o));
+    startBal = anchor.amount + since.reduce((s, o) => s + o.gbp, 0);
   }
 
   const cushion = Math.max(0, opts.cushion ?? state.settings.sendCushion ?? 0);
@@ -118,6 +126,7 @@ export function sendPlan(
     payItem,
     pay,
     payDay,
+    from,
     until,
     nextPay,
     salary,
@@ -126,6 +135,7 @@ export function sendPlan(
     startBal,
     anchor,
     anchorIsPlaceholder: !!anchor?.id.endsWith('-start'),
+    since,
     cushion,
     needGBP,
     rate,

@@ -176,6 +176,29 @@ export function nextOccurrence(state: State, item: Item, today: ISODate): Occ | 
 
 // ---------- balances ----------
 
+// A payment belongs to its WEEK, not to its exact day (Stefan 26/11: "I don't want to manage exact dates, just the
+// allocation to the week"). He removes a payment once it is paid, so one still on the list is still to come out —
+// even when its day has passed. A bank figure entered on Thursday therefore still has every payment of that week
+// that is on the list to come, Monday's included. Older weeks are settled by the newer figure.
+// Ticked-off payments keep their real day (the day they were paid).
+const anchorWeeks = new WeakMap<State, Map<string, ISODate>>();
+
+/** The day a payment counts for the balances: its own day, or later in its week if a bank figure was entered after it. */
+export function balDate(state: State, o: Occ): ISODate {
+  if (o.paid) return o.date;
+  let m = anchorWeeks.get(state);
+  if (!m) {
+    m = new Map();
+    for (const b of live(state.balances)) {
+      const k = `${b.account}|${weekStart(b.date)}`;
+      if (!m.has(k) || m.get(k)! < b.date) m.set(k, b.date);
+    }
+    anchorWeeks.set(state, m);
+  }
+  const last = m.get(`${o.item.account}|${weekStart(o.date)}`);
+  return last && last > o.date ? last : o.date;
+}
+
 export function latestBalance(state: State, account: string, onOrBefore?: ISODate) {
   return live(state.balances)
     .filter((b) => b.account === account && (!onOrBefore || b.date <= onOrBefore))
@@ -187,12 +210,16 @@ export function balanceAt(state: State, account: string, date: ISODate, occs?: O
   const anchor = latestBalance(state, account, date) || live(state.balances).filter((b) => b.account === account).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
   if (!anchor) return 0;
   if (anchor.date <= date) {
-    const list = occs ?? occurrences(state, anchor.date, date);
-    return anchor.amount + list.filter((o) => o.item.account === account && o.date >= anchor.date && o.date <= date).reduce((s, o) => s + o.gbp, 0);
+    const list = occs ?? occurrences(state, weekStart(anchor.date), date);
+    return anchor.amount + list.filter((o) => o.item.account === account && inRange(balDate(state, o), anchor.date, date)).reduce((s, o) => s + o.gbp, 0);
   }
   // before the first balance entered: walk backwards
   const list = occs ?? occurrences(state, addDays(date, 1), addDays(anchor.date, -1));
-  return anchor.amount - list.filter((o) => o.item.account === account && o.date > date && o.date < anchor.date).reduce((s, o) => s + o.gbp, 0);
+  return anchor.amount - list.filter((o) => o.item.account === account && o.date > date && balDate(state, o) < anchor.date).reduce((s, o) => s + o.gbp, 0);
+}
+
+function inRange(d: ISODate, from: ISODate, to: ISODate): boolean {
+  return d >= from && d <= to;
 }
 
 export interface WeekRow {
@@ -213,7 +240,7 @@ export function weeks(state: State, from: ISODate, count: number): WeekRow[] {
   const accounts = live(state.accounts);
   // take every payment from the earliest balance entered so balances are exact
   const firstAnchor = live(state.balances).map((b) => b.date).sort()[0] || start;
-  const occFrom = firstAnchor < start ? firstAnchor : start;
+  const occFrom = weekStart(firstAnchor < start ? firstAnchor : start);
   const all = occurrences(state, occFrom, end);
   const rows: WeekRow[] = [];
   for (let i = 0; i < count; i++) {
@@ -244,17 +271,20 @@ export function weeks(state: State, from: ISODate, count: number): WeekRow[] {
 /** End-of-day balance for every day in a range (for the chart). */
 export function dailyBalances(state: State, account: string, from: ISODate, to: ISODate): { date: ISODate; bal: number }[] {
   const firstAnchor = live(state.balances).filter((b) => b.account === account).map((b) => b.date).sort()[0] || from;
-  const occs = occurrences(state, firstAnchor < from ? firstAnchor : from, to);
+  const occs = occurrences(state, weekStart(firstAnchor < from ? firstAnchor : from), to);
   const out: { date: ISODate; bal: number }[] = [];
   let bal = balanceAt(state, account, addDays(from, -1), occs);
   const anchors = live(state.balances).filter((b) => b.account === account);
-  const mine = occs.filter((o) => o.item.account === account);
+  const mine = occs
+    .filter((o) => o.item.account === account)
+    .map((o) => ({ d: balDate(state, o), gbp: o.gbp }))
+    .sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
   let i = 0;
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const a = anchors.filter((b) => b.date === d).sort((x, y) => y.u - x.u)[0];
     if (a) bal = a.amount;
-    while (i < mine.length && mine[i].date < d) i++;
-    while (i < mine.length && mine[i].date === d) bal += mine[i++].gbp;
+    while (i < mine.length && mine[i].d < d) i++;
+    while (i < mine.length && mine[i].d === d) bal += mine[i++].gbp;
     out.push({ date: d, bal });
   }
   return out;
